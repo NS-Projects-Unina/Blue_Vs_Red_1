@@ -1,0 +1,19 @@
+version: "3.8"
+
+services:
+  ctf-server:
+    build: .
+    container_name: ctf-httpserver
+    ports:
+      - "8888:8888"
+    restart: unless-stopped
+    networks:
+      ctf-net:
+        ipv4_address: 10.10.0.10
+
+networks:
+  ctf-net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 10.10.0.0/24

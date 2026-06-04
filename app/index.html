@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Internal Management Portal</title>
+  <style>
+    body { font-family: monospace; background: #1a1a1a; color: #00ff00; padding: 40px; }
+    h2   { color: #00cc00; }
+    p    { color: #aaa; }
+    form { margin-top: 20px; }
+    input[type=file]   { color: #00ff00; }
+    input[type=submit] { background: #003300; color: #00ff00; border: 1px solid #00ff00;
+                         padding: 6px 14px; cursor: pointer; font-family: monospace; }
+  </style>
+</head>
+<body>
+  <h2>[ Internal Management Portal v1.0 ]</h2>
+  <p>Authorized personnel only. Unauthorized access is prohibited.</p>
+  <hr style="border-color:#003300">
+  <p>Config file upload utility:</p>
+  <form action="/upload" method="POST" enctype="multipart/form-data">
+    <input type="file"   name="file"><br><br>
+    <input type="hidden" name="filename" value="config.dat">
+    <input type="submit" value="[ UPLOAD ]">
+  </form>
+</body>
+</html>
