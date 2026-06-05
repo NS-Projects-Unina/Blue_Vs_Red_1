@@ -13,9 +13,6 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 class VulnHandler(http.server.BaseHTTPRequestHandler):
 
-    def log_message(self, format, *args):
-        pass  # log silenziato (parte del footprinting challenge)
-
     def do_GET(self):
         # Esegue un file .py caricato passando il comando via header X-CMD
         if self.path.startswith("/uploads/") and self.path.endswith(".py"):

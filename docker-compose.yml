@@ -2,7 +2,9 @@ version: "3.8"
 
 services:
   ctf-server:
-    build: .
+    build: 
+      context: .
+      dockerfile: HTTP-Dockerfile
     container_name: ctf-httpserver
     ports:
       - "8888:8888"
@@ -10,6 +12,18 @@ services:
     networks:
       ctf-net:
         ipv4_address: 10.10.0.10
+      hidden-net:
+        ipv4_address: 10.20.0.10
+
+  ctf-db:
+    build:
+      context: .
+      dockerfile: Dockerfile-db
+    container_name: ctf-db
+    restart: unless-stopped
+    networks:
+      hidden-net:
+        ipv4_address: 10.20.0.20
 
 networks:
   ctf-net:
@@ -17,3 +31,10 @@ networks:
     ipam:
       config:
         - subnet: 10.10.0.0/24
+        
+  hidden-net:
+    driver: bridge
+    internal: true
+    ipam:
+      config:
+        - subnet: 10.20.0.0/24

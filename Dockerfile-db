@@ -1,0 +1,36 @@
+FROM ubuntu:16.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Aggiorna i repository e installa redis-server
+RUN apt-get update && apt-get install -y \
+    redis-server \
+    && rm -rf /var/lib/apt/lists/*
+mode
+# Password di Redis 
+ENV REDIS_PASSWORD="Un4P4ssw0rdM0lt0S1cur4!"
+
+RUN echo '#!/bin/bash\n\
+# Avvia redis in background richiedendo la password\n\
+redis-server --daemonize yes --requirepass "$REDIS_PASSWORD"\n\
+sleep 2\n\
+\n\
+# Popola il database autenticandosi con il flag -a\n\
+redis-cli -a "$REDIS_PASSWORD" SET item:1 "Spada di legno"\n\
+redis-cli -a "$REDIS_PASSWORD" SET item:2 "Scudo di ferro"\n\
+redis-cli -a "$REDIS_PASSWORD" SET user:admin "hash_password_fittizio"
+redis-cli -a "$REDIS_PASSWORD" SET secret_flag "CTF{r3d1s_h1dd3n_fl4g_1337}"
+\n\
+# Salva i dati su disco e spegne redis
+redis-cli -a "$REDIS_PASSWORD" SAVE\n\
+redis-cli -a "$REDIS_PASSWORD" shutdown\n\
+\n\
+# Riavvia redis in primo piano richiedendo solo la password\n\
+exec redis-server --requirepass "$REDIS_PASSWORD"\n' > /start.sh
+
+RUN chmod +x /start.sh
+
+# Porta standard di Redis
+EXPOSE 6379
+
+CMD ["/start.sh"]
