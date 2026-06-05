@@ -2,27 +2,45 @@ FROM ubuntu:22.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 
+# Installa Apache, MariaDB, PHP e le estensioni necessarie
 RUN apt-get update && apt-get install -y \
-    python3 \
-    curl \
-    net-tools \
-    iputils-ping \
-    nmap \
+    apache2 \
+    mariadb-server \
+    php \
+    php-mysqli \
+    php-gd \
+    php-curl \
+    git \
     && rm -rf /var/lib/apt/lists/*
 
-# Struttura directory web
-RUN mkdir -p /var/www/html \
-             /var/www/uploads
+# Ultima versione di DVWA nella cartella web di Apache
+RUN rm -rf /var/www/html/* && \
+    git clone https://github.com/digininja/DVWA.git /var/www/html
 
-# Copia file applicazione
-COPY app/server.py  /var/www/server.py
-COPY app/index.html /var/www/html/index.html
+# Copia il file di configurazione di esempio
+RUN cp /var/www/html/config/config.inc.php.dist /var/www/html/config/config.inc.php
 
-# Permessi server
-RUN chmod +x /var/www/server.py
+# Configura i permessi per permettere l'upload dei file nelle cartelle vulnerabili
+RUN chown -R www-data:www-data /var/www/html && \
+    chmod -R 777 /var/www/html/hackable/uploads
 
-WORKDIR /var/www
+# Crea lo script di avvio usando un Here-Doc 
+RUN cat << 'EOF' > /start.sh
+#!/bin/bash
+service mariadb start
+mysql -e "CREATE DATABASE IF NOT EXISTS dvwa;"
+mysql -e "CREATE USER IF NOT EXISTS 'dvwa'@'localhost' IDENTIFIED BY 'p@ssw0rd';"
+mysql -e "GRANT ALL PRIVILEGES ON dvwa.* TO 'dvwa'@'localhost';"
+mysql -e "FLUSH PRIVILEGES;"
+apache2ctl -D FOREGROUND
+EOF
 
-EXPOSE 8888
+# Rendi lo script eseguibile
+RUN chmod +x /start.sh
 
-CMD ["python3", "server.py"]
+EXPOSE 80
+
+# Imposta il livello di sicurezza iniziale di DVWA su 'low'
+ENV DEFAULT_SECURITY_LEVEL=low
+
+CMD ["/start.sh"]

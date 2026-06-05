@@ -6,7 +6,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y \
     redis-server \
     && rm -rf /var/lib/apt/lists/*
-mode
+
 # Password di Redis 
 ENV REDIS_PASSWORD="Un4P4ssw0rdM0lt0S1cur4!"
 
@@ -18,10 +18,10 @@ sleep 2\n\
 # Popola il database autenticandosi con il flag -a\n\
 redis-cli -a "$REDIS_PASSWORD" SET item:1 "Spada di legno"\n\
 redis-cli -a "$REDIS_PASSWORD" SET item:2 "Scudo di ferro"\n\
-redis-cli -a "$REDIS_PASSWORD" SET user:admin "hash_password_fittizio"
-redis-cli -a "$REDIS_PASSWORD" SET secret_flag "CTF{r3d1s_h1dd3n_fl4g_1337}"
+redis-cli -a "$REDIS_PASSWORD" SET user:admin "hash_password_fittizio"\n\
+redis-cli -a "$REDIS_PASSWORD" SET secret_flag "CTF{r3d1s_h1dd3n_fl4g_1337}"\n\
 \n\
-# Salva i dati su disco e spegne redis
+# Salva i dati su disco e spegne redis\n\
 redis-cli -a "$REDIS_PASSWORD" SAVE\n\
 redis-cli -a "$REDIS_PASSWORD" shutdown\n\
 \n\
