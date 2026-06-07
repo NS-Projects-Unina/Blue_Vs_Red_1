@@ -1,40 +1,67 @@
-version: "3.8"
 
 services:
-  ctf-server:
-    build: 
-      context: .
-      dockerfile: HTTP-Dockerfile
-    container_name: ctf-httpserver
+# =================== RETE PUBLICA =====================
+# Container DVWA
+  dvwa:
+    build: ./dvwa
+    container_name: dvwa
     ports:
       - "8080:80"
     restart: unless-stopped
     networks:
-      ctf-net:
-        ipv4_address: 10.10.0.10
-      hidden-net:
-        ipv4_address: 10.20.0.10
+      - pub-net
+      - hidden-net
 
-  ctf-db:
+  attacker:
     build:
-      context: .
-      dockerfile: Dockerfile-db
-    container_name: ctf-db
+      context: ./attacker
+    container_name: attacker
     restart: unless-stopped
+    tty: true          
+    stdin_open: true    
     networks:
-      hidden-net:
-        ipv4_address: 10.20.0.20
+      - pub-net
+
+# =================== RETE NASCOSTA ===================
+  # Database Redis
+  redis:
+    image: redis:alpine
+    container_name: redis
+    networks:
+      - hidden-net
+  # Web app flask che si collega a database
+  web-app:
+    build: ./app
+    container_name: app
+    environment:
+      - REDIS_HOST=redis
+    depends_on:
+      - redis
+    networks:
+      - hidden-net
+  # Proxy vulnerabile ad attacco herartbleed  
+  proxy:
+    build: ./proxy
+    container_name: proxy    
+    expose:
+      - 443
+    depends_on:
+      - web-app
+    networks:
+      - hidden-net
+# Bot che simula delle richieste 
+  traffic-bot:
+    build: ./bot
+    container_name: bot
+    depends_on:
+      - proxy
+    networks:
+      - hidden-net
 
 networks:
-  ctf-net:
+  pub-net:
     driver: bridge
-    ipam:
-      config:
-        - subnet: 10.10.0.0/24
-        
+
   hidden-net:
     driver: bridge
-    internal: true
-    ipam:
-      config:
-        - subnet: 10.20.0.0/24
+    # internal: true
