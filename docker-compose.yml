@@ -1,5 +1,8 @@
 version: "3.8"
 
+# ============================================================
+#  RED TEAM 
+# ============================================================
 services:
   ctf-server:
     build: 
@@ -25,6 +28,80 @@ services:
       hidden-net:
         ipv4_address: 10.20.0.20
 
+# ============================================================
+#  BLUE TEAM 
+# ============================================================
+  snort:
+      build: ./snort
+      container_name: snort
+      restart: unless-stopped
+      cap_add: [NET_ADMIN, NET_RAW]
+      networks:
+        ctf-net:
+          ipv4_address: 10.10.0.50
+        hidden-net:
+          ipv4_address: 10.20.0.50
+        mgmt-net:
+          ipv4_address: 10.30.0.10
+      volumes:
+        - snort-logs:/var/log/snort
+
+  wazuh-agent:
+    build: ./wazuh-agent
+    container_name: wazuh-agent
+    restart: unless-stopped
+    networks:
+      mgmt-net:
+        ipv4_address: 10.30.0.11
+    volumes:
+      - snort-logs:/var/log/snort:ro
+    depends_on: [snort, wazuh-manager]
+
+  wazuh-manager:
+    image: wazuh/wazuh-manager:4.7.0
+    platform: linux/amd64
+    container_name: wazuh-manager
+    restart: unless-stopped
+    networks:
+      mgmt-net:
+        ipv4_address: 10.30.0.12
+    ports: ["1514:1514/udp", "1515:1515", "55000:55000"]
+    volumes:
+      - wazuh-manager-data:/var/ossec/data
+
+  wazuh-indexer:
+    image: wazuh/wazuh-indexer:4.7.0
+    platform: linux/amd64
+    container_name: wazuh.indexer
+    restart: unless-stopped
+    networks:
+      mgmt-net:
+        ipv4_address: 10.30.0.13
+    environment:
+      - "OPENSEARCH_JAVA_OPTS=-Xms1g -Xmx1g"
+      - bootstrap.memory_lock=true
+    ulimits:
+      memlock: {soft: -1, hard: -1}
+    volumes:
+      - wazuh-indexer-data:/var/lib/wazuh-indexer
+
+  wazuh-dashboard:
+    image: wazuh/wazuh-dashboard:4.7.0
+    platform: linux/amd64
+    container_name: wazuh-dashboard
+    restart: unless-stopped
+    networks:
+      mgmt-net:
+        ipv4_address: 10.30.0.14
+    ports: ["5601:443"]
+    environment:
+      - WAZUH_API_URL=https://wazuh-manager
+      - API_USERNAME=wazuh-wui
+      - API_PASSWORD=MyS3cr3tP4ssw0rd
+      - OPENSEARCH_HOSTS=https://wazuh.indexer:9200
+    depends_on: [wazuh-indexer, wazuh-manager]
+
+# ============================================================
 networks:
   ctf-net:
     driver: bridge
@@ -38,3 +115,15 @@ networks:
     ipam:
       config:
         - subnet: 10.20.0.0/24
+
+  mgmt-net:
+      driver: bridge
+      ipam:
+        config:
+          - subnet: 10.30.0.0/24
+
+# ============================================================
+volumes:
+  snort-logs:
+  wazuh-manager-data:
+  wazuh-indexer-data:

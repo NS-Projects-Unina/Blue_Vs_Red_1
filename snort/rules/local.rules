@@ -1,0 +1,55 @@
+# ============================================================
+#  local.rules — calibrate sui container del progetto
+#  ctf-server (DVWA): 10.10.0.10
+#  ctf-db (Redis):    10.20.0.20
+# ============================================================
+
+# Port scan sulla rete CTF
+alert tcp any any -> $HOME_NET any \
+    (msg:"[CTF] Port scan detected"; \
+     flags:S; \
+     threshold: type threshold, track by_src, count 15, seconds 3; \
+     classtype:network-scan; sid:1000001; rev:1;)
+
+# Redis raggiunto da ctf-net = pivot tra reti (critico per l'esame)
+alert tcp 10.10.0.0/24 any -> 10.20.0.20 6379 \
+    (msg:"[CTF] CRITICAL: Redis reached from ctf-net - possible pivot"; \
+     flags:S; classtype:attempted-recon; sid:1000002; rev:1;)
+
+# Qualsiasi probe su Redis
+alert tcp any any -> 10.20.0.20 6379 \
+    (msg:"[CTF] Redis connection attempt"; \
+     flags:S; classtype:attempted-recon; sid:1000003; rev:1;)
+
+# SQL Injection su DVWA (UNION)
+alert tcp any any -> 10.10.0.10 80 \
+    (msg:"[CTF] Possible SQL Injection - UNION"; \
+     content:"UNION"; nocase; \
+     classtype:web-application-attack; sid:1000004; rev:1;)
+
+# SQL Injection su DVWA (OR pattern)
+alert tcp any any -> 10.10.0.10 80 \
+    (msg:"[CTF] Possible SQL Injection - OR pattern"; \
+     content:"' OR '1'='1"; nocase; \
+     classtype:web-application-attack; sid:1000005; rev:1;)
+
+# LFI/RFI path traversal
+alert tcp any any -> 10.10.0.10 80 \
+    (msg:"[CTF] Possible LFI/RFI attempt"; \
+     content:"../"; \
+     classtype:web-application-attack; sid:1000006; rev:1;)
+
+# Reverse shell outbound da DVWA
+alert tcp 10.10.0.10 any -> any any \
+    (msg:"[CTF] Suspicious outbound from ctf-server - possible reverse shell"; \
+     flags:S; \
+     threshold: type threshold, track by_src, count 5, seconds 10; \
+     classtype:trojan-activity; sid:1000007; rev:1;)
+
+# Brute force login DVWA
+alert tcp any any -> 10.10.0.10 80 \
+    (msg:"[CTF] Brute force on DVWA login"; \
+     content:"POST"; http_method; \
+     content:"/login.php"; \
+     threshold: type threshold, track by_src, count 10, seconds 30; \
+     classtype:attempted-user; sid:1000008; rev:1;)
