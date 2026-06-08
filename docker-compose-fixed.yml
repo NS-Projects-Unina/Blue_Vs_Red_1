@@ -1,0 +1,221 @@
+# ============================================================
+#  RED TEAM
+# ============================================================
+services:
+  ctf-server:
+    build:
+      context: .
+      dockerfile: HTTP-Dockerfile
+    container_name: ctf-httpserver
+    ports:
+      - "8080:80"
+    restart: unless-stopped
+    networks:
+      ctf-net:
+        ipv4_address: 10.10.0.10
+      hidden-net:
+        ipv4_address: 10.20.0.10
+
+  ctf-db:
+    build:
+      context: .
+      dockerfile: Dockerfile-db
+    container_name: ctf-db
+    restart: unless-stopped
+    networks:
+      hidden-net:
+        ipv4_address: 10.20.0.20
+
+# ============================================================
+#  BLUE TEAM 
+# ============================================================
+  snort:
+    build: ./snort
+    container_name: snort
+    restart: unless-stopped
+    cap_add: [NET_ADMIN, NET_RAW]
+    networks:
+      ctf-net:
+        ipv4_address: 10.10.0.50
+      hidden-net:
+        ipv4_address: 10.20.0.50
+      mgmt-net:
+        ipv4_address: 10.30.0.10
+    volumes:
+      - snort-logs:/var/log/snort
+
+  wazuh-agent:
+    build: ./wazuh-agent
+    container_name: wazuh-agent
+    restart: unless-stopped
+    networks:
+      mgmt-net:
+        ipv4_address: 10.30.0.11
+    volumes:
+      - snort-logs:/var/log/snort:ro
+    depends_on:
+      snort:
+        condition: service_started
+      wazuh-manager:
+        condition: service_healthy
+
+# ============================================================
+#  BLUE TEAM — Wazuh stack
+# ============================================================
+  wazuh-indexer:
+    image: wazuh/wazuh-indexer:4.7.0
+    platform: linux/amd64
+    container_name: wazuh-indexer
+    hostname: wazuh.indexer
+    restart: unless-stopped
+    networks:
+      mgmt-net:
+        ipv4_address: 10.30.0.13
+    environment:
+      - "OPENSEARCH_JAVA_OPTS=-Xms1g -Xmx1g"
+      - bootstrap.memory_lock=true
+      - network.host=0.0.0.0
+      - node.name=wazuh.indexer
+      - cluster.initial_cluster_manager_nodes=wazuh.indexer
+      - discovery.type=single-node
+      - plugins.security.allow_default_init_securityindex=true
+      - INDEXER_USERNAME=admin
+      - INDEXER_PASSWORD=SecretPassword
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65536
+        hard: 65536
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/localhost/9200' 2>/dev/null && exit 0 || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+    volumes:
+      - wazuh-indexer-data:/var/lib/wazuh-indexer
+      - ./config/wazuh_indexer_ssl_certs/root-ca.pem:/usr/share/wazuh-indexer/config/certs/root-ca.pem
+      - ./config/wazuh_indexer_ssl_certs/wazuh.indexer-key.pem:/usr/share/wazuh-indexer/config/certs/indexer-key.pem
+      - ./config/wazuh_indexer_ssl_certs/wazuh.indexer.pem:/usr/share/wazuh-indexer/config/certs/indexer.pem
+      - ./config/wazuh_indexer_ssl_certs/admin.pem:/usr/share/wazuh-indexer/config/certs/admin.pem
+      - ./config/wazuh_indexer_ssl_certs/admin-key.pem:/usr/share/wazuh-indexer/config/certs/admin-key.pem
+
+  wazuh-manager:
+    image: wazuh/wazuh-manager:4.7.0
+    platform: linux/amd64
+    container_name: wazuh-manager
+    hostname: wazuh.manager
+    restart: unless-stopped
+    depends_on:
+      wazuh-indexer:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "/var/wazuh-manager/bin/wazuh-manager-control status 2>/dev/null | grep -v apid | grep -q 'not running' && exit 1 || exit 0"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 655360
+        hard: 655360
+    networks:
+      mgmt-net:
+        ipv4_address: 10.30.0.12
+    ports:
+      - "1514:1514/udp"
+      - "1515:1515"
+      - "55000:55000"
+    environment:
+      - WAZUH_INDEXER_HOSTS=wazuh.indexer:9200
+      - WAZUH_NODE_NAME=manager
+      - WAZUH_NODE_TYPE=master
+      - WAZUH_CLUSTER_BIND_ADDR=0.0.0.0
+      - WAZUH_CLUSTER_NODES=wazuh.manager
+      - INDEXER_USERNAME=admin
+      - INDEXER_PASSWORD=SecretPassword
+      - API_USERNAME=wazuh-wui
+      - API_PASSWORD=MyS3cr37P450r.*-
+    volumes:
+      - wazuh-manager-data:/var/wazuh-manager
+      - ./config/wazuh_indexer_ssl_certs/root-ca.pem:/var/wazuh-manager/etc/certs/root-ca.pem
+      - ./config/wazuh_indexer_ssl_certs/wazuh.manager.pem:/var/wazuh-manager/etc/certs/manager.pem
+      - ./config/wazuh_indexer_ssl_certs/wazuh.manager-key.pem:/var/wazuh-manager/etc/certs/manager-key.pem
+      - ./config/wazuh_cluster/wazuh_manager.conf:/wazuh-config-mount/etc/ossec.conf
+
+  wazuh-dashboard:
+    image: wazuh/wazuh-dashboard:4.7.0
+    platform: linux/amd64
+    container_name: wazuh-dashboard
+    hostname: wazuh.dashboard
+    restart: unless-stopped
+    depends_on:
+      wazuh-indexer:
+        condition: service_healthy
+      wazuh-manager:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-k", "-s", "-o", "/dev/null", "https://localhost:5601/login"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      mgmt-net:
+        ipv4_address: 10.30.0.14
+    ports:
+      - "5601:5601"
+    environment:
+      - SERVER_PORT=5601
+      - SERVER_HOST=0.0.0.0
+      - OPENSEARCH_HOSTS=["https://wazuh.indexer:9200"]
+      - INDEXER_USERNAME=admin
+      - INDEXER_PASSWORD=SecretPassword
+      - WAZUH_API_URL=https://wazuh.manager
+      - DASHBOARD_USERNAME=kibanaserver
+      - DASHBOARD_PASSWORD=kibanaserver
+      - API_USERNAME=wazuh-wui
+      - API_PASSWORD=MyS3cr37P450r.*-
+      - SERVER_SSL_CERTIFICATE=/usr/share/wazuh-dashboard/config/certs/wazuh-dashboard.pem
+      - SERVER_SSL_KEY=/usr/share/wazuh-dashboard/config/certs/wazuh-dashboard-key.pem
+      - OPENSEARCH_SSL_CERTIFICATE_AUTHORITIES=/usr/share/wazuh-dashboard/config/certs/root-ca.pem
+    volumes:
+      - ./config/wazuh_indexer_ssl_certs/wazuh.dashboard.pem:/usr/share/wazuh-dashboard/config/certs/wazuh-dashboard.pem
+      - ./config/wazuh_indexer_ssl_certs/wazuh.dashboard-key.pem:/usr/share/wazuh-dashboard/config/certs/wazuh-dashboard-key.pem
+      - ./config/wazuh_indexer_ssl_certs/root-ca.pem:/usr/share/wazuh-dashboard/config/certs/root-ca.pem
+      - wazuh-dashboard-config:/usr/share/wazuh-dashboard/config
+      - wazuh-dashboard-custom:/usr/share/wazuh-dashboard/plugins/wazuh/public/assets/custom
+
+# ============================================================
+networks:
+  ctf-net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 10.10.0.0/24
+
+  hidden-net:
+    driver: bridge
+    internal: true
+    ipam:
+      config:
+        - subnet: 10.20.0.0/24
+
+  mgmt-net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 10.30.0.0/24
+
+# ============================================================
+volumes:
+  snort-logs:
+  wazuh-manager-data:
+  wazuh-indexer-data:
+  wazuh-dashboard-config:
+  wazuh-dashboard-custom:
