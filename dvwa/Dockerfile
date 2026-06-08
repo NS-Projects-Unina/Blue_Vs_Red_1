@@ -2,6 +2,9 @@ FROM ubuntu:24.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 
+# ===== INSTALLAZIONE AGENT WAzUH =====
+
+
 # Installa Apache, MariaDB, PHP e le estensioni necessarie
 RUN apt-get update && apt-get install -y \
     apache2 \
@@ -23,6 +26,15 @@ RUN apt-get update && apt-get install -y \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
+
+RUN apt-get install -y gnupg apt-transport-https
+RUN curl -s https://packages.wazuh.com/key/GPG-KEY-WAZUH | gpg --no-default-keyring --keyring gnupg-ring:/usr/share/keyrings/wazuh.gpg --import && chmod 644 /usr/share/keyrings/wazuh.gpg
+RUN echo "deb [signed-by=/usr/share/keyrings/wazuh.gpg] https://packages.wazuh.com/4.x/apt/ stable main" | tee -a /etc/apt/sources.list.d/wazuh.list
+RUN apt-get update
+RUN WAZUH_MANAGER="wazuh.manager" apt-get install wazuh-agent
+
+
+    
 # Compila una versione vulnerabile di sudo 
 WORKDIR /opt
 RUN wget https://www.sudo.ws/dist/sudo-1.9.16p2.tar.gz && \
@@ -50,31 +62,7 @@ RUN chown -R www-data:www-data /var/www/html && \
     chmod -R 777 /var/www/html/hackable/uploads
 
 # Crea lo script di avvio aggiornato per eseguire anche il setup di DVWA
-RUN cat << 'EOF' > /start.sh
-#!/bin/bash
-# 1. Avvia i servizi in background
-service mariadb start
-service ssh start
-
-# 2. Configura i privilegi del Database
-mysql -e "CREATE DATABASE IF NOT EXISTS dvwa;"
-mysql -e "CREATE USER IF NOT EXISTS 'dvwa'@'localhost' IDENTIFIED BY 'p@ssw0rd';"
-mysql -e "GRANT ALL PRIVILEGES ON dvwa.* TO 'dvwa'@'localhost';"
-mysql -e "FLUSH PRIVILEGES;"
-
-# 3. Avvia Apache in background momentaneamente per eseguire il setup PHP
-service apache2 start
-
-# Aspetta un secondo per assicurarsi che Apache sia pronto
-sleep 1
-
-# Fermiamo il servizio Apache in background per evitare conflitti
-service apache2 stop
-
-# 5. Avvia Apache in primo piano (mantiene attivo il container)
-apache2ctl -D FOREGROUND
-EOF
-
+COPY start.sh /start.sh
 # Rendi lo script eseguibile
 RUN chmod +x /start.sh
 

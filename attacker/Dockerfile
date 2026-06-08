@@ -10,10 +10,10 @@ COPY ./scripts/chwoot.sh /root/privilege_escalation
 RUN apk add proxychains-ng \
         openssh \
         vim
-RUN cd /root
 RUN wget https://github.com/jpillora/chisel/releases/download/v1.9.1/chisel_1.9.1_linux_amd64.gz
-RUN gunzip chisel_1.9.1_linux_amd64.gz
-RUN mv chisel_1.9.1_linux_amd64 chisel
-RUN chmod +x chisel
+RUN mv chisel_1.9.1_linux_amd64.gz /root
+RUN gunzip /root/chisel_1.9.1_linux_amd64.gz
+RUN mv /root/chisel_1.9.1_linux_amd64 /root/chisel
+RUN chmod +x /root/chisel
 
 CMD ["/usr/src/metasploit-framework/msfconsole"]

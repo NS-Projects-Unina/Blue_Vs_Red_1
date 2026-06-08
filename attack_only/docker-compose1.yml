@@ -1,0 +1,67 @@
+
+services:
+# =================== RETE PUBLICA =====================
+# Container DVWA
+  dvwa:
+    build: ./dvwa
+    container_name: dvwa
+    ports:
+      - "8080:80"
+    restart: unless-stopped
+    networks:
+      - pub-net
+      - hidden-net
+
+  attacker:
+    build:
+      context: ./attacker
+    container_name: attacker
+    restart: unless-stopped
+    tty: true          
+    stdin_open: true    
+    networks:
+      - pub-net
+
+# =================== RETE NASCOSTA ===================
+  # Database Redis
+  redis:
+    image: redis:alpine
+    container_name: redis
+    networks:
+      - hidden-net
+  # Web app flask che si collega a database
+  web-app:
+    build: ./app
+    container_name: app
+    environment:
+      - REDIS_HOST=redis
+    depends_on:
+      - redis
+    networks:
+      - hidden-net
+  # Proxy vulnerabile ad attacco herartbleed  
+  proxy:
+    build: ./proxy
+    container_name: proxy    
+    expose:
+      - 443
+    depends_on:
+      - web-app
+    networks:
+      - hidden-net
+# Bot che simula delle richieste 
+  traffic-bot:
+    build: ./bot
+    container_name: bot
+    depends_on:
+      - proxy
+    networks:
+      - hidden-net
+
+networks:
+  pub-net:
+    driver: bridge
+
+  hidden-net:
+    driver: bridge
+    # internal: true
