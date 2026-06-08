@@ -36,6 +36,9 @@ services:
     container_name: app
     environment:
       - REDIS_HOST=redis
+    tty: true          
+    stdin_open: true 
+    restart: unless-stopped
     depends_on:
       - redis
     networks:
@@ -46,6 +49,9 @@ services:
     container_name: proxy    
     expose:
       - 443
+    tty: true          
+    stdin_open: true 
+    restart: unless-stopped
     depends_on:
       - web-app
     networks:
@@ -54,6 +60,7 @@ services:
   traffic-bot:
     build: ./bot
     container_name: bot
+    restart: unless-stopped
     depends_on:
       - proxy
     networks:
