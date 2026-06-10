@@ -62,7 +62,37 @@ RUN chown -R www-data:www-data /var/www/html && \
     chmod -R 777 /var/www/html/hackable/uploads
 
 # Crea lo script di avvio aggiornato per eseguire anche il setup di DVWA
-COPY start.sh /start.sh
+RUN cat << 'EOF' > /start.sh
+#!/bin/bash
+
+# Aggiunta hardening/configurazione dinamica dell'agent Wazuh prima dell'avvio.
+# Utilizza le variabili d'ambiente passate al container, se assenti usa 'wazuh.manager' di default.
+WAZUH_MANAGER_IP="${WAZUH_MANAGER:-wazuh.manager}"
+sed -i "s|<address>manager_IP</address>|<address>${WAZUH_MANAGER_IP}</address>|g" /var/ossec/etc/ossec.conf
+
+# 1. Avvia i servizi in background (Incluso l'agent Wazuh)
+service wazuh-agent start
+service mariadb start
+service ssh start
+
+# 2. Configura i privilegi del Database
+mysql -e "CREATE DATABASE IF NOT EXISTS dvwa;"
+mysql -e "CREATE USER IF NOT EXISTS 'dvwa'@'localhost' IDENTIFIED BY 'p@ssw0rd';"
+mysql -e "GRANT ALL PRIVILEGES ON dvwa.* TO 'dvwa'@'localhost';"
+mysql -e "FLUSH PRIVILEGES;"
+
+# 3. Avvia Apache in background momentaneamente per eseguire il setup PHP
+service apache2 start
+
+# Aspetta un secondo per assicurarsi che Apache sia pronto
+sleep 1
+
+# Fermiamo il servizio Apache in background per evitare conflitti
+service apache2 stop
+
+# 5. Avvia Apache in primo piano (mantiene attivo il container)
+apache2ctl -D FOREGROUND
+EOF
 # Rendi lo script eseguibile
 RUN chmod +x /start.sh
 
@@ -71,7 +101,7 @@ EXPOSE 80
 # Imposta il livello di sicurezza iniziale di DVWA su 'low'
 ENV DEFAULT_SECURITY_LEVEL=low
 
-COPY ossec-agent-additions.conf /tmp/extra.conf
-RUN cat /tmp/extra.conf >> /var/ossec/etc/ossec.conf
+#COPY ossec-agent-additions.conf /tmp/extra.conf
+#RUN cat /tmp/extra.conf >> /var/ossec/etc/ossec.conf
 
 CMD ["/start.sh"]

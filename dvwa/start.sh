@@ -10,8 +10,8 @@
 # =====================================================================
 # AVVIO DEI SERVIZI DI SISTEMA
 # =====================================================================
-echo "[WAZUH] Avvio del servizio wazuh-agent..."
-service wazuh-agent start
+#echo "[WAZUH] Avvio del servizio wazuh-agent..."
+#service wazuh-agent start
 
 echo "[SYSTEM] Avvio di MariaDB..."
 service mariadb start [cite: 4]
