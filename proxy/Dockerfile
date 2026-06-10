@@ -14,4 +14,6 @@ RUN apt-get update
 RUN WAZUH_MANAGER="wazuh.manager" apt-get install -y --force-yes wazuh-agent
 COPY start.sh /start.sh
 RUN chmod +x /start.sh
+COPY ossec-agent-additions.conf /tmp/extra.conf
+RUN cat /tmp/extra.conf >> /var/ossec/etc/ossec.conf
 CMD ["/start.sh"]

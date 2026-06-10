@@ -71,4 +71,7 @@ EXPOSE 80
 # Imposta il livello di sicurezza iniziale di DVWA su 'low'
 ENV DEFAULT_SECURITY_LEVEL=low
 
+COPY ossec-agent-additions.conf /tmp/extra.conf
+RUN cat /tmp/extra.conf >> /var/ossec/etc/ossec.conf
+
 CMD ["/start.sh"]
