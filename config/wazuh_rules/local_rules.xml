@@ -1,0 +1,229 @@
+<!--
+  ============================================================
+  Wazuh Custom Rules - Blue_Vs_Red_1 CTF (NS-Projects-Unina)
+
+  Infrastruttura:
+    dvwa        → Apache + DVWA (pub-net + hidden-net)
+    proxy       → nginx TLS 443 (hidden-net)  ← target Heartbleed
+    web-app     → Flask + Redis (hidden-net)
+    attacker    → Red Team (pub-net)
+
+  Path: /var/ossec/etc/rules/local_rules.xml
+        (montato via volume nel wazuh.manager)
+  ============================================================
+-->
+
+<group name="local,dvwa,ctf">
+
+  <!-- ==============================================================
+       1. PORT / NETWORK SCANNING
+       Agent:  dvwa  (Apache access.log)
+       ============================================================== -->
+
+  <!-- 1.1 User-Agent di tool di scanning nell'access log Apache/nginx -->
+  <rule id="100100" level="10">
+    <if_group>web_appsec</if_group>
+    <url_match>nmap|nikto|masscan|zap|dirbuster|gobuster|wfuzz|sqlmap|hydra|metasploit</url_match>
+    <description>Scanning tool User-Agent rilevato su DVWA (CTF)</description>
+    <group>scan,recon,pci_dss_11.4</group>
+  </rule>
+
+  <!-- 1.2 Flood di 404 dallo stesso IP → directory brute-force -->
+  <rule id="100101" level="10" frequency="20" timeframe="10">
+    <if_matched_sid>31101</if_matched_sid>
+    <same_source_ip />
+    <description>20+ errori HTTP 404 in 10s dallo stesso IP - possibile directory scan (DVWA)</description>
+    <group>scan,web_scan,pci_dss_11.4</group>
+  </rule>
+
+  <!-- 1.3 Flood di 400 dallo stesso IP → scanner HTTP probe -->
+  <rule id="100102" level="10" frequency="15" timeframe="10">
+    <if_matched_sid>31103</if_matched_sid>
+    <same_source_ip />
+    <description>15+ errori HTTP 400 in 10s dallo stesso IP - possibile scanner HTTP (DVWA)</description>
+    <group>scan,web_scan</group>
+  </rule>
+
+  <!-- 1.4 Pattern Nmap stealth nel syslog (iptables LOG o IDS) -->
+  <rule id="100103" level="12">
+    <if_group>syslog</if_group>
+    <match>nmap|XMAS scan|FIN scan|NULL scan|SYN stealth</match>
+    <description>Pattern Nmap stealth scan rilevato nel syslog (DVWA host)</description>
+    <group>scan,network_scan,pci_dss_11.4</group>
+  </rule>
+
+  <!-- 1.5 Flood connessioni stesso IP → Slowloris / DoS -->
+  <rule id="100104" level="10" frequency="50" timeframe="15">
+    <if_matched_sid>31151</if_matched_sid>
+    <same_source_ip />
+    <description>Flood connessioni HTTP dallo stesso IP - possibile Slowloris (DVWA)</description>
+    <group>scan,dos</group>
+  </rule>
+
+
+  <!-- ==============================================================
+       2. PRIVILEGE ESCALATION
+       Agent:  dvwa, web-app, proxy  (auth.log, audit.log)
+       ============================================================== -->
+
+  <!-- 2.1 sudo eseguito da www-data (processo Apache) -->
+  <rule id="100200" level="12">
+    <if_group>syslog</if_group>
+    <match>sudo</match>
+    <user>www-data</user>
+    <description>www-data ha eseguito sudo - possibile escalation da web shell (DVWA)</description>
+    <group>privesc,pci_dss_10.2.5,gdpr_IV_32.2</group>
+  </rule>
+
+  <!-- 2.2 SUID abuse: processo eseguito con EUID=0 da utente non-root (auditd) -->
+  <rule id="100201" level="12">
+    <if_group>audit</if_group>
+    <match>SYSCALL.*execve</match>
+    <field name="audit.euid">0</field>
+    <field name="audit.uid" negate="yes">0</field>
+    <description>Processo con EUID=0 e UID!=0 rilevato - possibile abuso SUID binary (DVWA)</description>
+    <group>privesc,suid_abuse,pci_dss_10.2.5</group>
+  </rule>
+
+  <!-- 2.3 Lettura /etc/passwd, /etc/shadow, /etc/sudoers da processo non-root -->
+  <rule id="100202" level="13">
+    <if_group>audit</if_group>
+    <match>SYSCALL.*open</match>
+    <field name="audit.name">/etc/passwd|/etc/shadow|/etc/sudoers</field>
+    <field name="audit.uid" negate="yes">0</field>
+    <description>File credenziali letto da processo non-root - escalation recon (DVWA)</description>
+    <group>privesc,credential_access,pci_dss_10.2.4</group>
+  </rule>
+
+  <!-- 2.4 Comando 'su' invocato (qualsiasi container) -->
+  <rule id="100203" level="14">
+    <if_group>syslog</if_group>
+    <program_name>su</program_name>
+    <description>Comando 'su' invocato - possibile escalation da web shell (CTF)</description>
+    <group>privesc,webshell,pci_dss_10.2.5</group>
+  </rule>
+
+  <!-- 2.5 Rootkit o processo nascosto rilevato da ossec rootcheck -->
+  <rule id="100204" level="15">
+    <if_group>ossec,rootcheck</if_group>
+    <match>hidden process|hidden file|Rootkit</match>
+    <description>Rootkit o processo nascosto rilevato - compromissione avanzata (CTF)</description>
+    <group>privesc,rootkit,pci_dss_11.4</group>
+  </rule>
+
+
+  <!-- ==============================================================
+       3. MALICIOUS FILE UPLOAD
+       Agent:  dvwa  (Apache access.log + FIM syscheck)
+       ============================================================== -->
+
+  <!-- 3.1 POST su hackable/uploads → upload avvenuto -->
+  <rule id="100300" level="10">
+    <if_group>web_appsec</if_group>
+    <url>hackable/uploads</url>
+    <match>POST</match>
+    <description>File caricato nella directory uploads di DVWA tramite HTTP POST</description>
+    <group>upload,pci_dss_6.5.8</group>
+  </rule>
+
+  <!-- 3.2 GET/POST su file .php in uploads → web shell in esecuzione -->
+  <rule id="100301" level="14">
+    <if_group>web_appsec</if_group>
+    <url>hackable/uploads/.*\.php</url>
+    <match>GET|POST</match>
+    <description>File PHP in DVWA uploads acceduto - probabile esecuzione web shell</description>
+    <group>upload,webshell_exec,pci_dss_6.5.8,gdpr_IV_32.2</group>
+  </rule>
+
+  <!-- 3.3 FIM: nuovo file .php creato in uploads (real-time) → quarantena automatica -->
+  <rule id="100302" level="13">
+    <if_group>ossec,syscheck</if_group>
+    <match>New file added to the system</match>
+    <field name="file">/var/www/html/hackable/uploads/.*\.php</field>
+    <description>FIM: nuovo file PHP rilevato in DVWA uploads - possibile web shell</description>
+    <group>upload,fim,webshell,pci_dss_11.5</group>
+  </rule>
+
+  <!-- 3.4 FIM: nuovo script/eseguibile in uploads → quarantena automatica -->
+  <rule id="100303" level="13">
+    <if_group>ossec,syscheck</if_group>
+    <match>New file added to the system</match>
+    <field name="file">/var/www/html/hackable/uploads/.*\.(sh|elf|py|pl|rb)</field>
+    <description>FIM: script/eseguibile rilevato in DVWA uploads</description>
+    <group>upload,fim,malware,pci_dss_11.5</group>
+  </rule>
+
+  <!-- 3.5 Bypass double-extension (es. shell.php.jpg) -->
+  <rule id="100304" level="12">
+    <if_group>web_appsec</if_group>
+    <url>hackable/uploads/.*\.php\.</url>
+    <description>Tentativo bypass double-extension in DVWA uploads (es. shell.php.jpg)</description>
+    <group>upload,bypass,pci_dss_6.5.8</group>
+  </rule>
+
+
+  <!-- ==============================================================
+       4. HEARTBLEED (CVE-2014-0160)
+       Agent:  proxy  (nginx error.log, syslog)
+       ============================================================== -->
+
+  <!-- 4.1 Keyword heartbeat/TLS anomaly nel log nginx/openssl -->
+  <rule id="100400" level="13">
+    <if_group>apache,syslog,nginx</if_group>
+    <match>heartbeat|heart.beat|TLS heartbeat|SSL_read.*error|record overflow|tlsv1 alert</match>
+    <description>Possibile probe Heartbleed - anomalia TLS heartbeat nel log proxy (CVE-2014-0160)</description>
+    <group>heartbleed,exploit,pci_dss_6.2,pci_dss_11.4</group>
+  </rule>
+
+  <!-- 4.2 Ripetuti errori Heartbleed dallo stesso IP → exploitation attiva -->
+  <rule id="100401" level="12" frequency="10" timeframe="10">
+    <if_matched_sid>100400</if_matched_sid>
+    <same_source_ip />
+    <description>Ripetute anomalie Heartbleed dallo stesso IP - exploitation attiva (proxy)</description>
+    <group>heartbleed,exploit,repeated,pci_dss_11.4</group>
+  </rule>
+
+  <!-- 4.3 Firma IDS Snort/Suricata per CVE-2014-0160 -->
+  <rule id="100402" level="15">
+    <if_group>ids,snort,suricata</if_group>
+    <match>CVE.2014.0160|heartbleed|ET EXPLOIT OpenSSL|GPL EXPLOIT OpenSSL TLS heartbeat</match>
+    <description>IDS: firma Heartbleed matched (CVE-2014-0160) - CRITICO</description>
+    <group>heartbleed,ids_alert,exploit,pci_dss_6.2,pci_dss_11.4</group>
+  </rule>
+
+  <!-- 4.4 Errori SSL/TLS anomali generici nel proxy -->
+  <rule id="100403" level="12">
+    <if_group>syslog,nginx</if_group>
+    <match>record length too long|unexpected message|bad record mac|decryption failed</match>
+    <description>Errore SSL/TLS anomalo nel proxy - possibile tentativo Heartbleed</description>
+    <group>heartbleed,ssl_error,pci_dss_6.2</group>
+  </rule>
+
+
+  <!-- ==============================================================
+       REGOLE DI CORRELAZIONE → ACTIVE RESPONSE
+       ============================================================== -->
+
+  <!-- AR trigger: scan confermato (web scan + network scan dallo stesso IP) -->
+  <rule id="100900" level="12" frequency="2" timeframe="30">
+    <if_matched_sid>100101,100103</if_matched_sid>
+    <same_source_ip />
+    <description>[AR] Scan confermato dallo stesso IP - attiva firewall-drop 10min</description>
+    <group>scan,ar_trigger,pci_dss_11.4</group>
+  </rule>
+
+  <!-- AR trigger: web shell in esecuzione confermata -->
+  <rule id="100901" level="15">
+    <if_matched_sid>100301</if_matched_sid>
+    <description>[AR] Esecuzione web shell confermata in DVWA - attiva firewall-drop 1h</description>
+    <group>webshell,ar_trigger,pci_dss_6.5.8</group>
+  </rule>
+
+  <!-- AR trigger: Heartbleed confermato da firma IDS -->
+  <rule id="100902" level="15">
+    <if_matched_sid>100402</if_matched_sid>
+    <description>[AR] Heartbleed confermato da IDS - attiva firewall-drop 1h sul proxy</description>
+    <group>heartbleed,ar_trigger,pci_dss_6.2</group>
+  </rule>
+
+</group>
