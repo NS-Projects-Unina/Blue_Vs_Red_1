@@ -255,14 +255,13 @@
     <mitre><id>T1059.004</id></mitre>
   </rule>
 
-  <!-- 2. Esecuzione silenziosa: GET su file .php in uploads senza parametri
-       La reverse shell viene chiamata con GET /hackable/uploads/shell.php
-       senza query string — pattern diverso dalle webshell normali -->
+    <!-- Esecuzione reverse shell: curl/browser su .php in uploads
+       Usa solo <match> sul full_log perché <url> fallisce
+       se DVWA è installato in /dvwa/ o con path diverso -->
   <rule id="100071" level="14">
     <if_sid>31100</if_sid>
-    <url>/hackable/uploads/</url>
-    <match type="pcre2">(?i)"GET /[^\?]*\.php([\s"]|$)</match>
-    <description>REVERSE SHELL: esecuzione diretta di .php in uploads senza parametri (tipico avvio reverse shell)</description>
+    <match type="pcre2">(?i)"GET .*hackable/uploads/.*\.php[^"]*" [245]\d\d</match>
+    <description>REVERSE SHELL: esecuzione .php in uploads rilevata (curl o browser)</description>
     <group>webshell,reverseshell,execution</group>
     <mitre><id>T1059.004</id></mitre>
   </rule>
@@ -282,12 +281,10 @@
     </mitre>
   </rule>
 
-  <!-- 4. FIM: file PHP aggiunto in uploads con dimensione tipica
-       La pentestmonkey shell è ~5KB. Qualsiasi .php in uploads è sospetto
-       ma lo combiniamo con la connessione outbound per avere conferma -->
+    <!-- Correlazione con connessione outbound: conferma attivazione -->
   <rule id="100073" level="15">
-    <if_sid>100071,100072</if_sid>
-    <description>REVERSE SHELL CONFERMATA: esecuzione .php in uploads + connessione outbound Apache attiva</description>
+    <if_sid>100071,100075</if_sid>
+    <description>REVERSE SHELL CONFERMATA: .php eseguito in uploads</description>
     <group>webshell,reverseshell,c2,critical,active_response</group>
     <mitre>
       <id>T1059.004</id>
@@ -303,6 +300,16 @@
     <match>netstat-monitor</match>
     <match type="pcre2">(?i)bin/sh|bin/bash</match>
     <description>REVERSE SHELL: shell interattiva rilevata tra i processi attivi (possibile proc_open da PHP)</description>
+    <group>webshell,reverseshell,execution</group>
+    <mitre><id>T1059.004</id></mitre>
+  </rule>
+
+    <!-- Copertura aggiuntiva: qualsiasi status code, anche 500
+       La reverse shell PHP va spesso in timeout e Apache risponde 500 -->
+  <rule id="100075" level="14">
+    <if_sid>31100</if_sid>
+    <match type="pcre2">(?i)"GET .*hackable/uploads/.*\.php</match>
+    <description>REVERSE SHELL: GET su file PHP in uploads (qualsiasi risposta HTTP)</description>
     <group>webshell,reverseshell,execution</group>
     <mitre><id>T1059.004</id></mitre>
   </rule>
