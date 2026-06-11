@@ -173,4 +173,62 @@
     <group>heartbleed,active_response,block</group>
   </rule>
 
+<!-- ══════════════════════════════════════════════════════════════
+     CVE-2025-32463 — Sudo - -chroot Privilege Escalation
+     Affects: sudo 1.9.14 – 1.9.17
+     Technique: MITRE T1068 (Exploitation for Privilege Escalation)
+     ══════════════════════════════════════════════════════════════ -->
+     
+<!-- 2. Fallback via full_command/journal (per container senza auth.log)
+       Cattura la stringa CHROOT= dall'output del wodle command
+       configurato nella sessione precedente -->
+  <rule id="100061" level="13">
+    <if_sid>530</if_sid>
+    <match>sudo-journal-monitor</match>
+    <match>CHROOT=</match>
+    <description>CVE-2025-32463: sudo --chroot rilevato via journal polling</description>
+    <group>privesc,sudo,cve-2025-32463</group>
+    <mitre><id>T1068</id></mitre>
+  </rule>
+
+  <!-- 3. Rilevazione del path sospetto: sudo -R che punta a /tmp o /home
+       Pattern tipico dell'exploit: sudo -R /tmp/fakechroot /bin/sh -->
+  <rule id="100062" level="14">
+    <if_sid>100060,100061</if_sid>
+    <match type="pcre2">CHROOT=\/tmp|CHROOT=\/home|CHROOT=\/var\/tmp|CHROOT=\/dev\/shm</match>
+    <description>CVE-2025-32463 CRITICO: sudo --chroot punta a path utente scrivibile (/tmp, /home, /dev/shm): exploit probabile</description>
+    <group>privesc,sudo,cve-2025-32463,critical</group>
+    <mitre><id>T1068</id></mitre>
+  </rule>
+
+  <!-- 4. FIM: comparsa di nsswitch.conf fuori da /etc di sistema
+       L'exploit piazza un nsswitch.conf fasullo dentro la fake chroot dir -->
+  <rule id="100063" level="14">
+    <if_sid>554</if_sid>
+    <field name="file" type="pcre2">\/tmp\/.*\/etc\/nsswitch\.conf|\/home\/.*\/etc\/nsswitch\.conf|\/var\/tmp\/.*nsswitch\.conf|\/dev\/shm\/.*nsswitch\.conf</field>
+    <description>CVE-2025-32463: nsswitch.conf creato fuori da /etc di sistema: staging exploit in corso</description>
+    <group>privesc,fim,cve-2025-32463</group>
+    <mitre><id>T1068</id></mitre>
+  </rule>
+
+  <!-- 5. FIM: comparsa di libnss_*.so o ld.so.preload in path non di sistema
+       L'exploit compila una shared library malevola nella fake chroot -->
+  <rule id="100064" level="14">
+    <if_sid>554</if_sid>
+    <field name="file" type="pcre2">\/tmp\/.*libnss_.*\.so|\/home\/.*libnss_.*\.so|\/tmp\/.*ld\.so\.preload|\/dev\/shm\/.*libnss_</field>
+    <description>CVE-2025-32463: libreria NSS malevola (libnss_*.so) o ld.so.preload rilevata in path utente: exploit attivo</description>
+    <group>privesc,fim,cve-2025-32463,critical</group>
+    <mitre><id>T1068</id></mitre>
+  </rule>
+
+  <!-- 6. Correlazione: se FIM ha visto nsswitch.conf fasullo E poi scatta sudo - -chroot
+       è la conferma della sequenza completa dell'exploit -->
+  <rule id="100065" level="15" frequency="2" timeframe="120">
+    <if_matched_sid>100063,100064</if_matched_sid>
+    <if_sid>100060,100061,100062</if_sid>
+    <description>CVE-2025-32463 CONFERMATO: sequenza exploit completa rilevata (staging NSS + sudo --chroot)</description>
+    <group>privesc,sudo,cve-2025-32463,critical,active_response</group>
+    <mitre><id>T1068</id></mitre>
+  </rule>
+
 </group>
