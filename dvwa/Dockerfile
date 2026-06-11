@@ -25,6 +25,7 @@ RUN apt-get update && apt-get install -y \
     git \
     ca-certificates \
     iptables \
+    net-tools \
     && rm -rf /var/lib/apt/lists/*
 
 
@@ -61,6 +62,9 @@ RUN sed -i "s/'db_user'\]   = 'app'/'db_user'\]   = 'dvwa'/g" /var/www/html/conf
 RUN chown -R www-data:www-data /var/www/html && \
     chmod -R 777 /var/www/html/hackable/uploads
 
+
+COPY ossec-agent-additions.conf /tmp/extra.conf
+
 # Crea lo script di avvio aggiornato per eseguire anche il setup di DVWA
 RUN cat << 'EOF' > /start.sh
 #!/bin/bash
@@ -72,6 +76,7 @@ sed -i "s|<address>manager_IP</address>|<address>${WAZUH_MANAGER_IP}</address>|g
 
 iptables -I INPUT -p tcp --syn -j LOG --log-prefix "NET-SCAN: "
 dmesg -T -w | grep --line-buffered "NET-SCAN:" >> /var/log/syslog &
+cat /tmp/extra.conf >> /var/ossec/etc/ossec.conf
 # 1. Avvia i servizi in background (Incluso l'agent Wazuh)
 service wazuh-agent start
 service mariadb start
@@ -102,8 +107,5 @@ EXPOSE 80
 
 # Imposta il livello di sicurezza iniziale di DVWA su 'low'
 ENV DEFAULT_SECURITY_LEVEL=low
-
-#COPY ossec-agent-additions.conf /tmp/extra.conf
-#RUN cat /tmp/extra.conf >> /var/ossec/etc/ossec.conf
 
 CMD ["/start.sh"]

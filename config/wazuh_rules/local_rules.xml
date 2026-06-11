@@ -169,8 +169,8 @@
   </rule>
 
   <rule id="100091" level="15">
-    <if_sid>100024,100041</if_sid>
-    <description>CRITICO: webshell confermata o eseguita – trigger active response</description>
+    <if_sid>100024,100041,100074</if_sid>
+    <description>CRITICO: webshell confermata, eseguita o connessa – trigger active response</description>
     <group>upload,webshell,active_response,block</group>
   </rule>
 
@@ -266,40 +266,14 @@
     <mitre><id>T1059.004</id></mitre>
   </rule>
 
-  <!-- 3. Connessione TCP outbound da Apache: rilevata via netstat wodle
-       Il wodle command già configurato nell'agent esegue netstat ogni 60s.
-       Apache non dovrebbe mai aprire connessioni ESTABLISHED in uscita. -->
-  <rule id="100072" level="15">
-    <if_sid>530</if_sid>
-    <match>netstat-monitor</match>
-    <match type="pcre2">ESTABLISHED.*apache|ESTABLISHED.*www-data|ESTABLISHED.*httpd</match>
-    <description>REVERSE SHELL ATTIVA: processo Apache/www-data ha una connessione TCP ESTABLISHED in uscita</description>
-    <group>webshell,reverseshell,c2,critical</group>
-    <mitre>
-      <id>T1059.004</id>
-      <id>T1071.001</id>
-    </mitre>
-  </rule>
-
-    <!-- Correlazione con connessione outbound: conferma attivazione -->
-  <rule id="100073" level="15">
-    <if_sid>100071,100075</if_sid>
-    <description>REVERSE SHELL CONFERMATA: .php eseguito in uploads</description>
-    <group>webshell,reverseshell,c2,critical,active_response</group>
-    <mitre>
-      <id>T1059.004</id>
-      <id>T1071.001</id>
-    </mitre>
-  </rule>
 
   <!-- 5. Processo figlio sospetto di Apache: /bin/sh spawned da www-data
        proc_open() crea un processo figlio. Il wodle netstat non lo vede
        ma il rootcheck/syscollector di Wazuh può rilevarlo via audit -->
-  <rule id="100074" level="14">
+  <rule id="100074" level="15">
     <if_sid>530</if_sid>
-    <match>netstat-monitor</match>
-    <match type="pcre2">(?i)bin/sh|bin/bash</match>
-    <description>REVERSE SHELL: shell interattiva rilevata tra i processi attivi (possibile proc_open da PHP)</description>
+    <match>process-monitor</match>
+    <description>REVERSE SHELL: shell interattiva (sh/bash) spawnata dall'utente web (www-data)</description>
     <group>webshell,reverseshell,execution</group>
     <mitre><id>T1059.004</id></mitre>
   </rule>
