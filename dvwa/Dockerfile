@@ -24,6 +24,7 @@ RUN apt-get update && apt-get install -y \
     libssl-dev \
     git \
     ca-certificates \
+    iptables \
     && rm -rf /var/lib/apt/lists/*
 
 
@@ -32,7 +33,6 @@ RUN curl -s https://packages.wazuh.com/key/GPG-KEY-WAZUH | gpg --no-default-keyr
 RUN echo "deb [signed-by=/usr/share/keyrings/wazuh.gpg] https://packages.wazuh.com/4.x/apt/ stable main" | tee -a /etc/apt/sources.list.d/wazuh.list
 RUN apt-get update
 RUN WAZUH_MANAGER="wazuh.manager" apt-get install -y wazuh-agent
-
 
     
 # Compila una versione vulnerabile di sudo 
@@ -70,6 +70,8 @@ RUN cat << 'EOF' > /start.sh
 WAZUH_MANAGER_IP="${WAZUH_MANAGER:-wazuh.manager}"
 sed -i "s|<address>manager_IP</address>|<address>${WAZUH_MANAGER_IP}</address>|g" /var/ossec/etc/ossec.conf
 
+iptables -I INPUT -p tcp --syn -j LOG --log-prefix "NET-SCAN: "
+dmesg -T -w | grep --line-buffered "NET-SCAN:" >> /var/log/syslog &
 # 1. Avvia i servizi in background (Incluso l'agent Wazuh)
 service wazuh-agent start
 service mariadb start

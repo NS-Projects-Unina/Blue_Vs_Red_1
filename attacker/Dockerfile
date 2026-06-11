@@ -15,5 +15,6 @@ RUN mv chisel_1.9.1_linux_amd64.gz /root
 RUN gunzip /root/chisel_1.9.1_linux_amd64.gz
 RUN mv /root/chisel_1.9.1_linux_amd64 /root/chisel
 RUN chmod +x /root/chisel
+RUN apk add nikto
 
 CMD ["/usr/src/metasploit-framework/msfconsole"]

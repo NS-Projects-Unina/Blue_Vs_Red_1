@@ -10,6 +10,10 @@ services:
     restart: unless-stopped
     tty: true          
     stdin_open: true 
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW 
+      - SYSLOG  
     networks:
       - pub-net
       - hidden-net
