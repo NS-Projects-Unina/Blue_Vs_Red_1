@@ -57,8 +57,8 @@
 
   <rule id="100020" level="14">
     <if_group>web|apache</if_group>
-    <url>/upload|/dvwa/upload|/hackable/uploads|/file_upload|/vulnerabilities/upload</url>
-    <match>\.php|\.php5|\.phtml|\.phar|\.shtml</match>
+    <field name="method">POST</field>
+    <url type="pcre2">(?i)(upload|hackable/uploads|file_upload|vulnerabilities/upload).*\.(php|php5|phtml|phar|shtml)</url>
     <description>Possibile upload di PHP webshell rilevato</description>
     <group>upload,webshell,attack</group>
   </rule>
@@ -66,16 +66,16 @@
   <rule id="100021" level="14">
     <if_group>web|apache</if_group>
     <url>/hackable/uploads/|/uploads/|/vulnerabilities/upload</url>
-    <match>GET</match>
-    <description>Accesso/esecuzione di file nella directory uploads: possibile webshell attiva</description>
+    <field name="method">GET</field>   ← usa <field> invece di <match>
+    <description>Esecuzione file in uploads: possibile webshell attiva</description>
     <group>upload,webshell,execution</group>
   </rule>
-  
+
   <rule id="100042" level="14">
     <if_group>web|apache</if_group>
     <url>/hackable/uploads/|/uploads/|/vulnerabilities/upload</url>
-    <match>POST</match>
-    <description>Accesso/esecuzione di file nella directory uploads: possibile webshell attiva</description>
+    <field name="method">POST</field>  ← stesso fix
+    <description>Upload in corso nella directory uploads</description>
     <group>upload,webshell,execution</group>
   </rule>
 
@@ -88,16 +88,15 @@
   </rule>
 
   <rule id="100023" level="11">
-    <if_group>syscheck</if_group>
-    <field name="file">/var/www/html/hackable/uploads/|/var/www/html/dvwa/hackable/uploads/</field>
-    <match>added</match>
+    <if_sid>554</if_sid>   ← SID nativo Wazuh per "file aggiunto"
+    <field name="file" type="pcre2">/var/www/html(/dvwa)?/hackable/uploads/</field>
     <description>Nuovo file rilevato nella directory uploads (FIM)</description>
     <group>upload,fim</group>
   </rule>
 
   <rule id="100024" level="15">
     <if_sid>100023</if_sid>
-    <field name="file">\.php$|\.phtml$|\.php5$</field>
+    <field name="file" type="pcre2">\.php$|\.phtml$|\.php5$|\.phar$</field>
     <description>CRITICO: file PHP aggiunto nella cartella uploads (webshell?)</description>
     <group>upload,webshell,fim,critical</group>
   </rule>
@@ -115,13 +114,11 @@
 
   <rule id="100041" level="14">
     <if_sid>31100</if_sid>
-    <url>/hackable/uploads/</url>
-    <match type="pcre2">(?i)GET.*\.php</match>
-    <description>CTF CRITICAL: Web Shell ESEGUITA con successo su DVWA! Richiesta mitigazione.</description>
+    <field name="method">GET</field>
+    <url type="pcre2">(?i)/hackable/uploads/.*\.php</url>
+    <description>CTF CRITICAL: Web Shell ESEGUITA su DVWA!</description>
     <group>attack,webshell_execute,active_response</group>
-    <mitre>
-      <id>T1105</id>
-    </mitre>
+    <mitre><id>T1105</id></mitre>
   </rule>
 
 
