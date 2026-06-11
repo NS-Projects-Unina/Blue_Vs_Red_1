@@ -38,54 +38,22 @@
   </rule>
 
 
-  <rule id="100010" level="12">
-    <if_sid>5402</if_sid>
-    <match>sudo</match>
-    <description>Uso di sudo da parte di un utente: possibile privilege escalation</description>
+ <!-- Privilege escalation via journal/command output -->
+  <rule id="100050" level="12">
+    <if_sid>530</if_sid>
+    <match>sudo-journal-monitor</match>
+    <regex>sudo.*COMMAND|sudo.*authentication failure|sudo.*incorrect password</regex>
+    <description>Privilege escalation: attività sudo rilevata via journal</description>
     <group>privesc,sudo</group>
+    <mitre><id>T1548.003</id></mitre>
   </rule>
 
-  <rule id="100011" level="13" frequency="5" timeframe="60">
-    <if_matched_sid>5401</if_matched_sid>
-    <description>Multipli tentativi sudo falliti: possibile brute-force privilege escalation</description>
+  <rule id="100051" level="14" frequency="3" timeframe="60">
+    <if_matched_sid>100050</if_matched_sid>
+    <match>authentication failure|incorrect password</match>
+    <description>Multipli fallimenti sudo: possibile brute-force escalation</description>
     <group>privesc,sudo,brute_force</group>
   </rule>
-
-  <rule id="100012" level="12">
-    <if_group>syscheck</if_group>
-    <field name="file">/usr/bin/passwd|/usr/bin/sudo|/bin/su|/usr/bin/pkexec</field>
-    <match>modified</match>
-    <description>Modifica a binario SUID critico rilevata: possibile privilege escalation</description>
-    <group>privesc,suid,integrity</group>
-  </rule>
-
-  <rule id="100013" level="10">
-    <if_sid>5303</if_sid>
-    <description>Cambio utente tramite su: monitorare per escalation</description>
-    <group>privesc,su</group>
-  </rule>
-
-  <rule id="100014" level="14">
-    <if_group>syscheck</if_group>
-    <field name="file">/etc/passwd|/etc/shadow|/etc/sudoers</field>
-    <description>Modifica critica a file di autenticazione: alta priorità</description>
-    <group>privesc,integrity,authentication</group>
-  </rule>
-
-  <rule id="100015" level="11">
-    <if_group>audit</if_group>
-    <match>type=SYSCALL.*open.*shadow|type=PATH.*shadow</match>
-    <description>Tentativo di accesso a /etc/shadow rilevato</description>
-    <group>privesc,audit</group>
-  </rule>
-
-  <rule id="100016" level="11">
-    <if_group>syscheck</if_group>
-    <field name="file">/etc/cron|/var/spool/cron</field>
-    <description>Modifica a crontab: possibile persistence o escalation</description>
-    <group>privesc,persistence</group>
-  </rule>
-
 
   <rule id="100020" level="14">
     <if_group>web|apache</if_group>
