@@ -65,6 +65,34 @@ RUN chown -R www-data:www-data /var/www/html && \
 
 COPY ossec-agent-additions.conf /tmp/extra.conf
 
+
+RUN cat << 'INNSCRIPT' > /var/ossec/active-response/bin/process-killer.sh
+
+#!/bin/bash
+# Wazuh 4.x invia i dettagli dell'alert in formato JSON tramite STDIN
+read INPUT_JSON
+# File di log interno per debug dell'Active Response
+LOG_FILE="/var/ossec/logs/active-responses.log"
+# 1. Estraiamo il campo "full_log" dal JSON
+FULL_LOG=$(echo "$INPUT_JSON" | grep -o '"full_log":"[^"]*"' | cut -d'"' -f4)
+# 2. Estraiamo il PID. 
+PID=$(echo "$FULL_LOG" | grep -o 'www-data [0-9]*' | awk '{print $2}')
+# 3. Controllo di sicurezza: eseguiamo il kill SOLO se abbiamo estratto un numero valido
+if [[ "$PID" =~ ^[0-9]+$ ]]; then
+    echo "$(date '+%Y-%m-%d %H:%M:%S') - ACTIVE RESPONSE: Reverse shell rilevata! Esecuzione KILL sul PID $PID" >> $LOG_FILE
+    kill -9 $PID
+    echo "$(date '+%Y-%m-%d %H:%M:%S') - ACTIVE RESPONSE: Processo $PID terminato con successo." >> $LOG_FILE
+else
+    echo "$(date '+%Y-%m-%d %H:%M:%S') - ACTIVE RESPONSE ERRORE: Nessun PID trovato nel log: $FULL_LOG" >> $LOG_FILE
+fi
+INNSCRIPT
+
+# Assegniamo i permessi corretti imposti da Wazuh per motivi di sicurezza
+RUN chmod 750 /var/ossec/active-response/bin/process-killer.sh && \
+    chown root:wazuh /var/ossec/active-response/bin/process-killer.sh
+# =====================================================================
+
+
 # Crea lo script di avvio aggiornato per eseguire anche il setup di DVWA
 RUN cat << 'EOF' > /start.sh
 #!/bin/bash
@@ -77,6 +105,7 @@ sed -i "s|<address>manager_IP</address>|<address>${WAZUH_MANAGER_IP}</address>|g
 iptables -I INPUT -p tcp --syn -j LOG --log-prefix "NET-SCAN: "
 dmesg -T -w | grep --line-buffered "NET-SCAN:" >> /var/log/syslog &
 cat /tmp/extra.conf >> /var/ossec/etc/ossec.conf
+
 # 1. Avvia i servizi in background (Incluso l'agent Wazuh)
 service wazuh-agent start
 service mariadb start
@@ -102,6 +131,8 @@ apache2ctl -D FOREGROUND
 EOF
 # Rendi lo script eseguibile
 RUN chmod +x /start.sh
+
+
 
 EXPOSE 80
 

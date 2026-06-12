@@ -3,7 +3,7 @@
   <rule id="100001" level="10">
     <if_sid>31100</if_sid> 
     <match type="pcre2">(?i)nmap|nikto</match> 
-    <description>CTF ALERT: Tentativo di scanning web su DVWA rilevato tramite tool noto (Nmap/Nikto)</description>
+    <description>CTF ALERT: Tentativo di scanning web su DVWA rilevato </description>
     <group>scan,recon,web,attack</group>
     <mitre>
       <id>T1595.002</id> 
