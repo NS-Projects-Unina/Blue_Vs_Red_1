@@ -62,13 +62,6 @@
     <group>upload,webshell,attack</group>
   </rule>
 
-  <rule id="100030" level="15">
-    <if_sid>100020</if_sid>
-    <field name="file">\.php$|\.phtml$|\.php5$|\.sh$|\.py$|\.pl$|\.rb$|\.elf$|\.cgi$</field>
-    <description>UPLOAD ESEGUIBILE RILEVATO in DVWA: $(file)</description>
-    <group>dvwa,file_upload,executable,</group>
-  </rule>
-
   <rule id="100021" level="14">
     <if_group>web|apache</if_group>
     <url>/hackable/uploads/|/uploads/|/vulnerabilities/upload</url>
