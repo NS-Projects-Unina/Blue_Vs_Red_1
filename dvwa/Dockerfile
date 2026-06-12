@@ -67,23 +67,32 @@ COPY ossec-agent-additions.conf /tmp/extra.conf
 
 
 RUN cat << 'INNSCRIPT' > /var/ossec/active-response/bin/process-killer.sh
-
 #!/bin/bash
-# Wazuh 4.x invia i dettagli dell'alert in formato JSON tramite STDIN
 read INPUT_JSON
-# File di log interno per debug dell'Active Response
 LOG_FILE="/var/ossec/logs/active-responses.log"
-# 1. Estraiamo il campo "full_log" dal JSON
-FULL_LOG=$(echo "$INPUT_JSON" | grep -o '"full_log":"[^"]*"' | cut -d'"' -f4)
-# 2. Estraiamo il PID. 
-PID=$(echo "$FULL_LOG" | grep -o 'www-data [0-9]*' | awk '{print $2}')
-# 3. Controllo di sicurezza: eseguiamo il kill SOLO se abbiamo estratto un numero valido
+
+# Estrai full_log dal JSON con python3 (gestisce correttamente l'escaping JSON)
+FULL_LOG=$(echo "$INPUT_JSON" | python3 -c "
+import sys, json
+try:
+    data = json.load(sys.stdin)
+    # Wazuh 4.x annida il log in data.parameters.alert.full_log
+    print(data.get('parameters', {}).get('alert', {}).get('full_log', ''))
+except Exception as e:
+    sys.stderr.write(str(e))
+    sys.exit(1)
+")
+
+# Estrai il PID: www-data seguito da spazi multipli e poi il numero
+PID=$(echo "$FULL_LOG" | grep -oP 'www-data\s+\K[0-9]+' | head -1)
+
 if [[ "$PID" =~ ^[0-9]+$ ]]; then
-    echo "$(date '+%Y-%m-%d %H:%M:%S') - ACTIVE RESPONSE: Reverse shell rilevata! Esecuzione KILL sul PID $PID" >> $LOG_FILE
-    kill -9 $PID
-    echo "$(date '+%Y-%m-%d %H:%M:%S') - ACTIVE RESPONSE: Processo $PID terminato con successo." >> $LOG_FILE
+    echo "$(date '+%Y-%m-%d %H:%M:%S') - ACTIVE RESPONSE: Reverse shell rilevata! Esecuzione KILL sul PID $PID" >> "$LOG_FILE"
+    kill -9 "$PID"
+    echo "$(date '+%Y-%m-%d %H:%M:%S') - ACTIVE RESPONSE: Processo $PID terminato con successo." >> "$LOG_FILE"
 else
-    echo "$(date '+%Y-%m-%d %H:%M:%S') - ACTIVE RESPONSE ERRORE: Nessun PID trovato nel log: $FULL_LOG" >> $LOG_FILE
+    echo "$(date '+%Y-%m-%d %H:%M:%S') - ACTIVE RESPONSE ERRORE: Nessun PID trovato nel log: $FULL_LOG" >> "$LOG_FILE"
+    echo "$(date '+%Y-%m-%d %H:%M:%S') - DEBUG JSON: $INPUT_JSON" >> "$LOG_FILE"
 fi
 INNSCRIPT
 
