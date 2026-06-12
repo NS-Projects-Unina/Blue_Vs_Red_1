@@ -89,16 +89,16 @@
 
   <rule id="100023" level="11">
     <if_sid>554</if_sid>
-    <field name="file" type="pcre2">/var/www/html(/dvwa)?/hackable/uploads/</field>
+    <match>/var/www/html/hackable/uploads/</match>
     <description>Nuovo file rilevato nella directory uploads (FIM)</description>
     <group>upload,fim</group>
   </rule>
 
   <rule id="100024" level="15">
     <if_sid>100023</if_sid>
-    <field name="file" type="pcre2">\.php$|\.phtml$|\.php5$|\.phar$</field>
-    <description>CRITICO: file PHP aggiunto nella cartella uploads (webshell?)</description>
-    <group>upload,webshell,fim,critical</group>
+    <match type="pcre2">\.php|\.phtml|\.php5|\.phar|\.sh|\.py|\.pl|\.rb|\.elf|\.cgi</match>
+    <description>CRITICO: File pericoloso/eseguibile aggiunto nella cartella uploads (FIM)</description>
+    <group>upload,webshell,fim,critical,active_response</group>
   </rule>
 
   <rule id="100022" level="12">
@@ -120,16 +120,6 @@
     </mitre>
   </rule>
 
-  <rule id="100041" level="14">
-    <if_sid>31100</if_sid>
-    <url>/hackable/uploads/</url>
-    <match type="pcre2">(?i)GET.*\.php</match>
-    <description>CTF CRITICAL: Web Shell ESEGUITA con successo su DVWA! Richiesta mitigazione.</description>
-    <group>attack,webshell_execute,active_response</group>
-    <mitre>
-      <id>T1105</id>
-    </mitre>
-  </rule>
 
 
   

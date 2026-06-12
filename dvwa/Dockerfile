@@ -68,7 +68,7 @@ COPY ossec-agent-additions.conf /tmp/extra.conf
 
 RUN cat << 'INNSCRIPT' > /var/ossec/active-response/bin/process-killer.sh
 #!/bin/bash
-read INPUT_JSON
+INPUT_JSON=$(cat) # Sostituisce "read INPUT_JSON" ed evita troncamenti
 LOG_FILE="/var/ossec/logs/active-responses.log"
 
 # Estrai full_log dal JSON con python3 (gestisce correttamente l'escaping JSON)
@@ -95,6 +95,60 @@ else
     echo "$(date '+%Y-%m-%d %H:%M:%S') - DEBUG JSON: $INPUT_JSON" >> "$LOG_FILE"
 fi
 INNSCRIPT
+
+
+# ===== ACTIVE RESPONSE: file-deleter (cancella upload eseguibili) =====
+
+RUN cat << 'INNSCRIPT' > /var/ossec/active-response/bin/file-deleter.sh
+#!/bin/bash
+read INPUT_JSON
+LOG_FILE="/var/ossec/logs/active-responses.log"
+# Estrai il path del file dal campo syscheck.path nel JSON Wazuh 4.x
+FILE_PATH=$(echo "$INPUT_JSON" | python3 -c "
+import sys, json
+try:
+    data = json.load(sys.stdin)
+    alert = data.get('parameters', {}).get('alert', {})
+    # Wazuh mette il path in syscheck.path
+    path = alert.get('syscheck', {}).get('path', '')
+    print(path)
+except Exception as e:
+    sys.stderr.write(str(e))
+    sys.exit(1)
+")
+# Sanity check 1: il path deve essere non vuoto
+if [[ -z "$FILE_PATH" ]]; then
+    echo "$(date '+%Y-%m-%d %H:%M:%S') - FILE-DELETER ERRORE: path vuoto. JSON: $INPUT_JSON" >> "$LOG_FILE"
+    exit 1
+fi
+# Sanity check 2: il file deve stare dentro uploads (evita path traversal)
+ALLOWED_DIR="/var/www/html/hackable/uploads"
+REAL_PATH=$(realpath -m "$FILE_PATH" 2>/dev/null)
+if [[ "$REAL_PATH" != "$ALLOWED_DIR/"* ]]; then
+    echo "$(date '+%Y-%m-%d %H:%M:%S') - FILE-DELETER ERRORE: path fuori da uploads: $REAL_PATH" >> "$LOG_FILE"
+    exit 1
+fi
+# Sanity check 3: il file deve esistere
+if [[ ! -f "$REAL_PATH" ]]; then
+    echo "$(date '+%Y-%m-%d %H:%M:%S') - FILE-DELETER: file già rimosso o non trovato: $REAL_PATH" >> "$LOG_FILE"
+    exit 0
+fi
+# Eliminazione
+rm -f "$REAL_PATH"
+if [[ $? -eq 0 ]]; then
+    echo "$(date '+%Y-%m-%d %H:%M:%S') - FILE-DELETER: Eseguibile eliminato con successo: $REAL_PATH" >> "$LOG_FILE"
+else
+    echo "$(date '+%Y-%m-%d %H:%M:%S') - FILE-DELETER ERRORE: impossibile eliminare $REAL_PATH" >> "$LOG_FILE"
+    exit 1
+fi
+INNSCRIPT
+RUN chmod 750 /var/ossec/active-response/bin/file-deleter.sh && \
+    chown root:wazuh /var/ossec/active-response/bin/file-deleter.sh
+# =====================================================================
+ 
+
+
+
 
 # Assegniamo i permessi corretti imposti da Wazuh per motivi di sicurezza
 RUN chmod 750 /var/ossec/active-response/bin/process-killer.sh && \
