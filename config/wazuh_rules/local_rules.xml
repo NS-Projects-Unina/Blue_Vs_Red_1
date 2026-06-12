@@ -89,14 +89,14 @@
 
   <rule id="100023" level="11">
     <if_sid>554</if_sid>
-    <match>/var/www/html/hackable/uploads/</match>
+    <field name="syscheck.path" type="pcre2">/hackable/uploads/</field>
     <description>Nuovo file rilevato nella directory uploads (FIM)</description>
     <group>upload,fim</group>
   </rule>
 
   <rule id="100024" level="15">
     <if_sid>100023</if_sid>
-    <match type="pcre2">\.php|\.phtml|\.php5|\.phar|\.sh|\.py|\.pl|\.rb|\.elf|\.cgi</match>
+    <field name="syscheck.path" type="pcre2">\.php$|\.phtml$|\.php5$|\.phar$|\.sh$|\.py$|\.pl$|\.rb$|\.elf$|\.cgi$</field>
     <description>CRITICO: File pericoloso/eseguibile aggiunto nella cartella uploads (FIM)</description>
     <group>upload,webshell,fim,critical,active_response</group>
   </rule>
